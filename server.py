@@ -39,6 +39,7 @@ def ensure_db_initialized():
             实际金额 REAL NOT NULL,
             支付账户 TEXT DEFAULT '',
             目标账户 TEXT DEFAULT '',
+            结算状态 TEXT DEFAULT '已结算',
             备注 TEXT DEFAULT ''
         )
     """)
@@ -47,6 +48,13 @@ def ensure_db_initialized():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(日期)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category ON expenses(分类)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_expenses_type ON expenses(交易类型)")
+
+    # 兼容旧库：早期版本建表时漏了「结算状态」列。
+    # db_manager.py 的 INSERT 会写入该列，缺列会导致新增账单报 500，这里幂等补齐。
+    existing_cols = [row[1] for row in cursor.execute("PRAGMA table_info(expenses)").fetchall()]
+    if "结算状态" not in existing_cols:
+        cursor.execute("ALTER TABLE expenses ADD COLUMN 结算状态 TEXT DEFAULT '已结算'")
+        print(">>> [System Init] 已为 expenses 表补齐缺失的「结算状态」列。")
 
     conn.commit()
     conn.close()
